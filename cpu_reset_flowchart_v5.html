@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CPU Reset / Instruction Cycle Flowchart</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:          #F5F7FA;
+    --surface:     #FFFFFF;
+    --border:      #DDE3EE;
+    --text:        #1A2340;
+    --muted:       #5A6785;
+    --accent:      #3B5BDB;
+
+    /* Phase colours */
+    --fetch-bg:    #EBF0FF;
+    --fetch-bd:    #7B9CFF;
+    --fetch-text:  #1E3A8A;
+
+    --decode-bg:   #F5F0FF;
+    --decode-bd:   #A78BFA;
+    --decode-text: #4C1D95;
+
+    --alu-bg:      #ECFDF5;
+    --alu-bd:      #34D399;
+    --alu-text:    #064E3B;
+
+    --mov-bg:      #EEF2FF;
+    --mov-bd:      #818CF8;
+    --mov-text:    #1E1B4B;
+
+    --jmp-bg:      #FFF1F2;
+    --jmp-bd:      #FB7185;
+    --jmp-text:    #881337;
+
+    --exec-bg:     #F0FDF4;
+    --exec-bd:     #4ADE80;
+    --exec-text:   #14532D;
+
+    --end-bg:      #FEF9EC;
+    --end-bd:      #FBBF24;
+    --end-text:    #78350F;
+
+    --arrow:       #94A3B8;
+    --loop-dash:   #CBD5E1;
+    --phase-label: #64748B;
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 24px 64px;
+  }
+
+  /* ── Header ── */
+  header {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -.4px;
+    color: var(--text);
+  }
+  header p {
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--muted);
+    letter-spacing: .2px;
+  }
+
+  /* ── Chart wrapper ── */
+  .chart {
+    position: relative;
+    width: 100%;
+    max-width: 700px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  /* ── Connector helpers ── */
+  .arrow-down {
+    width: 2px;
+    height: 28px;
+    background: var(--arrow);
+    position: relative;
+    flex-shrink: 0;
+  }
+  .arrow-down::after {
+    content: '';
+    position: absolute;
+    bottom: -5px;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: var(--arrow);
+  }
+
+  .arrow-down.short { height: 18px; }
+  .arrow-down.tall  { height: 40px; }
+
+  /* ── Phase label strip ── */
+  .phase-strip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0 2px;
+    align-self: flex-end;
+    padding-right: 4px;
+  }
+  .phase-strip span {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--phase-label);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 3px 10px;
+    border-radius: 999px;
+  }
+
+  /* ── Base node ── */
+  .node {
+    width: 100%;
+    max-width: 440px;
+    padding: 14px 22px;
+    border-radius: 10px;
+    border: 1.5px solid var(--border);
+    background: var(--surface);
+    text-align: center;
+    position: relative;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  }
+  .node .label {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+  .node .sub {
+    margin-top: 5px;
+    font-size: 11.5px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--muted);
+  }
+
+  /* ── Pill (Power on / Cycle) ── */
+  .node-pill {
+    padding: 10px 32px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 600;
+    border: 1.5px solid var(--border);
+    background: var(--surface);
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    max-width: 260px;
+    width: 100%;
+  }
+
+  /* ── Fetch nodes ── */
+  .fetch {
+    background: var(--fetch-bg);
+    border-color: var(--fetch-bd);
+  }
+  .fetch .label { color: var(--fetch-text); }
+
+  /* ── Diamond ── */
+  .diamond-wrap {
+    width: 200px;
+    height: 100px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .diamond-wrap svg {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    overflow: visible;
+  }
+  .diamond-text {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+  }
+  .diamond-text .label {
+    font-size: 14px;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--decode-text);
+  }
+  .diamond-text .sub {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 3px;
+  }
+
+  /* ── Execute branch row ── */
+  .branch-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    width: 100%;
+    max-width: 680px;
+    position: relative;
+    margin-top: 0;
+  }
+
+  .branch-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  /* Branch header label */
+  .branch-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  /* ── Exec cards ── */
+  .node-exec {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1.5px solid;
+    text-align: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,.05);
+  }
+  .node-exec .label {
+    font-size: 12.5px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .node-exec .line {
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  .alu  { background: var(--alu-bg);  border-color: var(--alu-bd);  }
+  .alu  .label { color: var(--alu-text);  }
+  .mov  { background: var(--mov-bg);  border-color: var(--mov-bd);  }
+  .mov  .label { color: var(--mov-text);  }
+  .jmp  { background: var(--jmp-bg);  border-color: var(--jmp-bd);  }
+  .jmp  .label { color: var(--jmp-text);  }
+
+  /* ── Connector between decode diamond & branches ── */
+  .branch-connector {
+    width: 100%;
+    max-width: 680px;
+    height: 60px;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .branch-connector svg {
+    width: 100%; height: 100%;
+    overflow: visible;
+  }
+
+  /* ── After branches join ── */
+  .join-connector {
+    width: 100%;
+    max-width: 680px;
+    height: 44px;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .join-connector svg { width: 100%; height: 100%; overflow: visible; }
+
+  /* ── Step 7 end node ── */
+  .node-end {
+    background: var(--end-bg);
+    border-color: var(--end-bd);
+  }
+  .node-end .label { color: var(--end-text); }
+
+  /* ── Cycle pill ── */
+  .node-cycle {
+    background: var(--surface);
+    border-color: var(--border);
+    color: var(--text);
+  }
+
+  /* ── Loop-back dashed arrow (left side) ── */
+  .loop-svg {
+    position: absolute;
+    left: -1px;
+    top: 60px;
+    pointer-events: none;
+  }
+
+  /* ── Legend ── */
+  .legend {
+    width: 100%;
+    max-width: 700px;
+    margin-top: 56px;
+    padding: 24px 28px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 1px 6px rgba(0,0,0,.05);
+  }
+  .legend h2 {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1.1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 18px;
+  }
+  .legend-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 12px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .legend-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+    border: 1.5px solid;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .legend-item p {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.2;
+  }
+  .legend-item span {
+    display: block;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+    line-height: 1.4;
+  }
+
+  .legend-divider {
+    grid-column: 1 / -1;
+    height: 1px;
+    background: var(--border);
+    margin: 4px 0;
+  }
+
+  /* Signal glossary */
+  .signal-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+    gap: 8px;
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+  }
+  .signal-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .signal-item code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    background: #EEF2FF;
+    padding: 1px 6px;
+    border-radius: 4px;
+    width: fit-content;
+  }
+  .signal-item small {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>CPU Instruction Cycle — Reset &amp; Fetch–Decode–Execute</h1>
+  <p>Control signal walkthrough &nbsp;·&nbsp; Step-by-step microcode sequence</p>
+</header>
+
+<div class="chart" style="position:relative;">
+
+  <!-- ── Loop-back dashed SVG ── -->
+  <svg class="loop-svg" width="50" height="0" id="loopSvg" style="overflow:visible;">
+    <defs>
+      <marker id="loop-arrow" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+        <path d="M1,1 L7,4 L1,7 Z" fill="var(--loop-dash)"/>
+      </marker>
+    </defs>
+    <path id="loopPath" fill="none" stroke="var(--loop-dash)" stroke-width="1.6"
+          stroke-dasharray="5,4" marker-end="url(#loop-arrow)"/>
+  </svg>
+
+  <!-- POWER ON -->
+  <div class="node-pill" id="nodeStart">Power on / RESET</div>
+  <div class="arrow-down"></div>
+
+  <!-- ── FETCH ── -->
+  <div class="phase-strip" style="align-self:flex-end; padding-right:16px;"><span>FETCH</span></div>
+
+  <div class="node fetch" id="nodeStep1">
+    <div class="label">Step 1 &nbsp;—&nbsp; IAR → bus → MAR latch</div>
+    <div class="sub">IAR_E, MAR_S asserted</div>
+  </div>
+  <div class="arrow-down"></div>
+
+  <div class="node fetch">
+    <div class="label">Step 2 &nbsp;—&nbsp; RAM[MAR] → bus → IR latch</div>
+    <div class="sub">RAM_E, IR_S asserted</div>
+  </div>
+  <div class="arrow-down"></div>
+
+  <div class="node fetch">
+    <div class="label">Step 3 &nbsp;—&nbsp; IAR + 1 → IAR</div>
+    <div class="sub">IAR_E, BUS1, IAR_S &nbsp;— PC increments</div>
+  </div>
+  <div class="arrow-down tall"></div>
+
+  <!-- ── DECODE ── -->
+  <div class="phase-strip" style="align-self:flex-end; padding-right:16px;"><span>DECODE</span></div>
+
+  <!-- Diamond -->
+  <div class="diamond-wrap" id="nodeDiamond">
+    <svg viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
+      <polygon points="100,4 196,50 100,96 4,50"
+               fill="#F5F0FF" stroke="#A78BFA" stroke-width="1.6"/>
+    </svg>
+    <div class="diamond-text">
+      <div class="label">IR[7:4]</div>
+      <div class="sub">Instruction class?</div>
+    </div>
+  </div>
+
+  <!-- Branch connector SVG: dynamically positioned by JS -->
+  <div class="branch-connector" id="branchConn">
+    <svg id="branchSvg" width="100%" height="60" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;"></svg>
+  </div>
+
+  <!-- ── EXECUTE label ── -->
+  <div class="phase-strip" style="align-self:flex-end; padding-right:16px; margin-top:2px;"><span>EXECUTE</span></div>
+
+  <!-- ── Execute branch cards ── -->
+  <div class="branch-row">
+    <!-- ALU -->
+    <div class="branch-col">
+      <div class="node-exec alu">
+        <div class="label">Steps 4 – 6</div>
+        <div class="line">Rx_E → TMP_S</div>
+        <div class="line">ALU op executes</div>
+        <div class="line">ACC_S + FLAGS_S</div>
+      </div>
+    </div>
+    <!-- MOV/LOAD -->
+    <div class="branch-col">
+      <div class="node-exec mov">
+        <div class="label">Steps 4 – 5</div>
+        <div class="line">Rx_E → bus</div>
+        <div class="line">Ry_S latches value</div>
+        <div class="line">or RAM_S writes</div>
+      </div>
+    </div>
+    <!-- JUMP -->
+    <div class="branch-col">
+      <div class="node-exec jmp">
+        <div class="label">Steps 4 – 5</div>
+        <div class="line">Flag check (Z / C)</div>
+        <div class="line">Jump addr → bus</div>
+        <div class="line">IAR_S latches addr</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── JOIN lines: dynamically positioned by JS ── -->
+  <div class="join-connector" id="joinConn">
+    <svg id="joinSvg" width="100%" height="52" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;"></svg>
+  </div>
+
+  <!-- Step 7 -->
+  <div class="node node-end" id="nodeStep7">
+    <div class="label">Step 7 / END &nbsp;—&nbsp; STEPPER resets</div>
+    <div class="sub">END wire pulses — returns to Step 1</div>
+  </div>
+  <div class="arrow-down"></div>
+
+  <!-- Cycle repeats -->
+  <div class="node-pill node-cycle" id="nodeCycle">Cycle repeats ↺</div>
+
+</div><!-- /chart -->
+
+
+<!-- ── Legend ── -->
+<div class="legend">
+  <h2>Legend</h2>
+  <div class="legend-grid">
+
+    <div class="legend-item">
+      <div class="legend-swatch" style="background:var(--fetch-bg); border-color:var(--fetch-bd);"></div>
+      <div>
+        <p>FETCH phase</p>
+        <span>Steps 1 – 3: load instruction from RAM into IR and advance PC</span>
+      </div>
+    </div>
+
+    <div class="legend-item">
+      <div class="legend-swatch" style="background:var(--decode-bg); border-color:var(--decode-bd);"></div>
+      <div>
+        <p>DECODE phase</p>
+        <span>IR[7:4] inspected to select execution path</span>
+      </div>
+    </div>
+
+    <div class="legend-item">
+      <div class="legend-swatch" style="background:var(--alu-bg); border-color:var(--alu-bd);"></div>
+      <div>
+        <p>ALU-type Execute</p>
+        <span>Steps 4 – 6: arithmetic / logic; result to ACC + FLAGS</span>
+      </div>
+    </div>
+
+    <div class="legend-item">
+      <div class="legend-swatch" style="background:var(--mov-bg); border-color:var(--mov-bd);"></div>
+      <div>
+        <p>MOV / LOAD Execute</p>
+        <span>Steps 4 – 5: register-to-register or RAM write</span>
+      </div>
+    </div>
+
+    <div class="legend-item">
+      <div class="legend-swatch" style="background:var(--jmp-bg); border-color:var(--jmp-bd);"></div>
+      <div>
+        <p>JUMP-type Execute</p>
+        <span>Steps 4 – 5: conditional flag check, load IAR with target</span>
+      </div>
+    </div>
+
+    <div class="legend-item">
+      <div class="legend-swatch" style="background:var(--end-bg); border-color:var(--end-bd);"></div>
+      <div>
+        <p>STEPPER Reset</p>
+        <span>Step 7: END wire fires, STEPPER counter resets to 0</span>
+      </div>
+    </div>
+
+    <div class="legend-divider"></div>
+
+    <div class="legend-item">
+      <div style="width:14px; height:14px; display:flex; align-items:center; margin-top:2px; flex-shrink:0;">
+        <svg width="14" height="10" viewBox="0 0 14 10"><line x1="0" y1="5" x2="10" y2="5" stroke="#94A3B8" stroke-width="1.6" marker-end="url(#a)"/><defs><marker id="a" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#94A3B8"/></marker></defs></svg>
+      </div>
+      <div>
+        <p>Solid arrow</p>
+        <span>Sequential control flow (one step to next)</span>
+      </div>
+    </div>
+
+    <div class="legend-item">
+      <div style="width:14px; height:14px; display:flex; align-items:center; margin-top:2px; flex-shrink:0;">
+        <svg width="14" height="10" viewBox="0 0 14 10"><line x1="0" y1="5" x2="10" y2="5" stroke="#CBD5E1" stroke-width="1.6" stroke-dasharray="3,2"/></svg>
+      </div>
+      <div>
+        <p>Dashed arrow</p>
+        <span>Loop-back: cycle repeats from Step 1</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Signal glossary -->
+  <div class="signal-grid">
+    <div class="signal-item"><code>IAR_E</code><small>Instruction Address Register Enable — drives IAR onto bus</small></div>
+    <div class="signal-item"><code>MAR_S</code><small>Memory Address Register Set — latches bus value into MAR</small></div>
+    <div class="signal-item"><code>RAM_E</code><small>RAM Enable — drives RAM[MAR] onto bus</small></div>
+    <div class="signal-item"><code>IR_S</code><small>Instruction Register Set — latches opcode from bus</small></div>
+    <div class="signal-item"><code>BUS1</code><small>Forces +1 onto bus adder for PC increment</small></div>
+    <div class="signal-item"><code>IAR_S</code><small>IAR Set — writes incremented / jump addr back</small></div>
+    <div class="signal-item"><code>TMP_S</code><small>Temp Register Set — latches first ALU operand</small></div>
+    <div class="signal-item"><code>ACC_S</code><small>Accumulator Set — stores ALU result</small></div>
+    <div class="signal-item"><code>FLAGS_S</code><small>Flags Set — updates Z (zero) and C (carry) bits</small></div>
+    <div class="signal-item"><code>Rx_E / Ry_S</code><small>General-purpose register enable / set signals</small></div>
+    <div class="signal-item"><code>RAM_S</code><small>RAM Set — writes bus value to RAM[MAR]</small></div>
+    <div class="signal-item"><code>END</code><small>Pulses to reset STEPPER counter back to step 0</small></div>
+  </div>
+</div>
+
+<script>
+  const C  = '#94A3B8';
+  const ns = 'http://www.w3.org/2000/svg';
+
+  function mkLine(x1,y1,x2,y2){
+    const l=document.createElementNS(ns,'line');
+    l.setAttribute('x1',x1); l.setAttribute('y1',y1);
+    l.setAttribute('x2',x2); l.setAttribute('y2',y2);
+    l.setAttribute('stroke',C); l.setAttribute('stroke-width','1.6');
+    return l;
+  }
+  function mkArrow(cx,cy,up){
+    const p=document.createElementNS(ns,'polygon');
+    const tip = up ? cy : cy;
+    // pointing down: tip at (cx, cy), base 8px above
+    p.setAttribute('points', up
+      ? `${cx},${cy-8} ${cx-5},${cy} ${cx+5},${cy}`   // up arrow
+      : `${cx},${cy} ${cx-5},${cy-8} ${cx+5},${cy-8}` // down arrow
+    );
+    p.setAttribute('fill',C);
+    return p;
+  }
+  function mkText(x,y,txt){
+    const t=document.createElementNS(ns,'text');
+    t.setAttribute('x',x); t.setAttribute('y',y);
+    t.setAttribute('text-anchor','middle');
+    t.setAttribute('font-size','11');
+    t.setAttribute('font-family','Inter,sans-serif');
+    t.setAttribute('fill','#5A6785');
+    t.setAttribute('font-weight','600');
+    t.textContent=txt;
+    return t;
+  }
+
+  function drawConnectors(){
+    const branchRow  = document.querySelector('.branch-row');
+    const branchSvg  = document.getElementById('branchSvg');
+    const joinSvg    = document.getElementById('joinSvg');
+    const branchConn = document.getElementById('branchConn');
+    const joinConn   = document.getElementById('joinConn');
+    const cols       = branchRow.querySelectorAll('.branch-col');
+
+    if(!cols.length) return;
+
+    // ── Branch connector (above cards) ──────────────────────────────
+    const branchRect = branchConn.getBoundingClientRect();
+    const svgH = 60;
+    branchSvg.setAttribute('height', svgH);
+    branchSvg.innerHTML = '';
+
+    const xs = Array.from(cols).map(col => {
+      const r = col.getBoundingClientRect();
+      return r.left - branchRect.left + r.width / 2;
+    });
+    const xL = xs[0], xC = xs[1], xR = xs[2];
+    const barY = 16, arrowTip = svgH - 2;
+    const labels = ['ALU-type','MOV / LOAD','JUMP-type'];
+
+    // stem from connector top (= diamond bottom) down to bar
+    branchSvg.appendChild(mkLine(xC, 0, xC, barY));
+    // horizontal bar
+    branchSvg.appendChild(mkLine(xL, barY, xR, barY));
+    // drops
+    [xL, xC, xR].forEach((x,i) => {
+      branchSvg.appendChild(mkLine(x, barY, x, arrowTip));
+      branchSvg.appendChild(mkArrow(x, arrowTip, false));
+      branchSvg.appendChild(mkText(x, barY + (arrowTip - barY)/2 + 4, labels[i]));
+    });
+
+    // ── Join connector (below cards) ────────────────────────────────
+    const joinRect = joinConn.getBoundingClientRect();
+    joinSvg.innerHTML = '';
+    const joinH = 52;
+    joinSvg.setAttribute('height', joinH);
+
+    const jxs = Array.from(cols).map(col => {
+      const r = col.getBoundingClientRect();
+      return r.left - joinRect.left + r.width / 2;
+    });
+    const jxL=jxs[0], jxC=jxs[1], jxR=jxs[2];
+    const jBarY = joinH - 14;
+
+    // rises
+    [jxL, jxC, jxR].forEach(x => joinSvg.appendChild(mkLine(x, 0, x, jBarY)));
+    // horizontal join
+    joinSvg.appendChild(mkLine(jxL, jBarY, jxR, jBarY));
+    // drop with arrow
+    joinSvg.appendChild(mkLine(jxC, jBarY, jxC, joinH));
+    joinSvg.appendChild(mkArrow(jxC, joinH, false));
+  }
+
+  // ── Loop-back dashed arrow ────────────────────────────────────────
+  (function() {
+    const start = document.getElementById('nodeStep7');
+    const end   = document.getElementById('nodeStep1');
+    const svg   = document.getElementById('loopSvg');
+    const path  = document.getElementById('loopPath');
+    const chart = document.querySelector('.chart');
+
+    function draw() {
+      const chartRect = chart.getBoundingClientRect();
+      const startRect = start.getBoundingClientRect();
+      const endRect   = end.getBoundingClientRect();
+
+      const ox  = -30;
+      const pad = 24;
+
+      const x1  = startRect.left - chartRect.left;
+      const y1  = startRect.top  - chartRect.top + startRect.height / 2;
+      const x2  = endRect.left   - chartRect.left;
+      const y2  = endRect.top    - chartRect.top + endRect.height / 2;
+
+      const lx  = ox;
+      const h   = chartRect.height;
+
+      svg.style.top    = '0';
+      svg.style.left   = lx + 'px';
+      svg.setAttribute('width',  Math.abs(x1 - lx) + 50);
+      svg.setAttribute('height', h);
+
+      const sx = x1 - lx;
+      const ex = x2 - lx;
+
+      path.setAttribute('d',
+        `M ${sx},${y1} L ${pad},${y1} L ${pad},${y2} L ${ex},${y2}`
+      );
+
+      drawConnectors();
+    }
+
+    draw();
+    window.addEventListener('resize', draw);
+  })();
+</script>
+
+</body>
+</html>
